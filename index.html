@@ -112,11 +112,6 @@
   .provider-btn.active { background-color: var(--accent-yellow); }
 
   .validation-msg { font-size: 0.8rem; font-weight: 600; color: var(--text-danger); }
-
-  .hist-row { display: flex; align-items: flex-end; gap: 4px; height: 56px; padding-top: 4px; }
-  .hist-cell { flex: 1; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; min-width: 0; }
-  .hist-bar { height: 36px; min-width: 4px; border: 2px solid var(--border-color); border-radius: 3px; box-shadow: 2px 2px 0 0 var(--shadow-color); transition: width 0.15s ease; }
-  .hist-label { font-size: 0.65rem; font-weight: 700; text-align: center; margin-top: 4px; color: var(--text-dim); }
 </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -187,8 +182,17 @@
           <div class="text-xs mt-1" style="color: var(--text-dim);">Base URL is auto-resolved to the full endpoint on blur (OpenAI → <code>/chat/completions</code>, Anthropic → <code>/v1/messages</code>). A full URL you already pasted is left untouched.</div>
         </div>
         <div>
-          <label class="label-text">MODEL</label>
-          <input id="model" class="neo-input w-full" type="text" value="" placeholder="e.g. gpt-4o-mini · claude-opus-4-6 · glm-4.7-flash"/>
+          <div class="flex items-center justify-between mb-1">
+            <label class="label-text" style="margin-bottom: 0;">MODEL</label>
+            <button type="button" id="fetchModelsBtn" class="text-xs font-bold px-2 py-1 neo-border" style="background-color: var(--bg-header);" onclick="fetchModels()">Fetch models</button>
+          </div>
+          <div class="flex gap-2">
+            <input id="model" class="neo-input flex-1" type="text" value="" placeholder="e.g. gpt-4o-mini · claude-opus-4-6 · glm-4.7-flash"/>
+            <select id="modelSelect" class="neo-input" style="display: none; max-width: 12rem;" onchange="if(this.value){document.getElementById('model').value=this.value;this.value='';}">
+              <option value="">Pick a model…</option>
+            </select>
+          </div>
+          <div id="modelsStatus" class="text-xs mt-1" style="color: var(--text-dim);"></div>
         </div>
       </div>
 
@@ -355,6 +359,74 @@ async function llmctFetch(url, init) {
   });
 }
 
+/* ---------- Fetch models ---------- */
+// Calls the provider's /v1/models endpoint and populates the model dropdown.
+// Works with both the page-side fetch() and the extension relay (llmctFetch).
+async function fetchModels() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const endpoint = document.getElementById('endpoint').value.trim();
+  const status = document.getElementById('modelsStatus');
+  const select = document.getElementById('modelSelect');
+  const btn = document.getElementById('fetchModelsBtn');
+  if (!apiKey || !endpoint) {
+    status.style.color = 'var(--text-danger)';
+    status.textContent = 'Set API key and endpoint first.';
+    return;
+  }
+  // Strip the trailing path to derive the base URL.
+  let base = endpoint.replace(/\/(chat\/completions|messages)(\/.*)?$/i, '');
+  if (!/\/v1$/i.test(base)) base = base.replace(/\/+$/, '') + '/v1';
+  const url = base + '/models';
+
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Fetching…';
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'GET ' + url;
+
+  let headers;
+  if (currentProvider === 'anthropic') {
+    headers = {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    };
+  } else {
+    headers = { 'Authorization': 'Bearer ' + apiKey };
+  }
+
+  try {
+    const res = await llmctFetch(url, { method: 'GET', headers });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error('HTTP ' + res.status + (errText ? ' — ' + errText.slice(0, 200) : ''));
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.data) ? data.data : (Array.isArray(data.models) ? data.models : []);
+    if (list.length === 0) throw new Error('Empty model list — unexpected response shape.');
+    // Sort alphabetically and dedupe ids.
+    const ids = Array.from(new Set(list.map(m => m && (m.id || m.name)).filter(Boolean))).sort();
+    // Reset select.
+    select.innerHTML = '<option value="">Pick a model… (' + ids.length + ')</option>';
+    ids.forEach(id => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = id;
+      select.appendChild(opt);
+    });
+    select.style.display = '';
+    status.style.color = 'var(--text-success, #14532d)';
+    status.textContent = ids.length + ' model' + (ids.length === 1 ? '' : 's') + ' loaded.';
+  } catch (e) {
+    status.style.color = 'var(--text-danger)';
+    status.textContent = 'Failed: ' + (e.message || String(e));
+    select.style.display = 'none';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
 /* ---------- Provider + endpoint normalization ---------- */
 let currentProvider = 'openai';
 
@@ -378,8 +450,15 @@ function setProvider(provider) {
   saveField('provider', provider);
   const endpointEl = document.getElementById('endpoint');
   if (endpointEl.value.trim()) {
-    endpointEl.value = normalizeEndpoint(provider, endpointEl.value);
-    saveField('endpoint', endpointEl.value);
+    // If the user already has a full endpoint (matches either provider's path),
+    // do NOT rewrite it on provider switch — that caused the "appends a path"
+    // behavior. Only rewrite bare base URLs.
+    const v = endpointEl.value.trim();
+    const isFullEndpoint = /\/(chat\/completions|messages)(\/|$|\?)/i.test(v);
+    if (!isFullEndpoint) {
+      endpointEl.value = normalizeEndpoint(provider, v);
+      saveField('endpoint', endpointEl.value);
+    }
   }
 }
 
@@ -769,54 +848,6 @@ function statBlock(value, label) {
   return '<div class="stat-box"><div class="v">' + value + '</div><div class="l">' + label + '</div></div>';
 }
 
-function miniStat(value, label) {
-  return '<div class="stat-box" style="padding: 0.6rem 0.75rem;"><div class="v" style="font-size: 1.05rem;">' + value + '</div><div class="l" style="font-size: 0.62rem;">' + label + '</div></div>';
-}
-
-// ---- distribution helpers ----
-function percentile(arr, p) {
-  if (!arr || arr.length === 0) return null;
-  const sorted = arr.slice().sort((a, b) => a - b);
-  if (sorted.length === 1) return sorted[0];
-  const rank = (p / 100) * (sorted.length - 1);
-  const lo = Math.floor(rank);
-  const hi = Math.ceil(rank);
-  if (lo === hi) return sorted[lo];
-  return +(sorted[lo] + (sorted[hi] - sorted[lo]) * (rank - lo)).toFixed(3);
-}
-function summary(arr) {
-  if (!arr || arr.length === 0) return null;
-  const sorted = arr.slice().sort((a, b) => a - b);
-  const sum = sorted.reduce((a, v) => a + v, 0);
-  return {
-    count: sorted.length,
-    min: sorted[0],
-    max: sorted[sorted.length - 1],
-    mean: +(sum / sorted.length).toFixed(2),
-    median: sorted.length % 2
-      ? sorted[(sorted.length - 1) / 2]
-      : +((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2).toFixed(3),
-  };
-}
-function histogramBins(arr, binCount) {
-  if (!arr || arr.length === 0) return null;
-  const sorted = arr.slice().sort((a, b) => a - b);
-  const min = sorted[0];
-  const max = sorted[sorted.length - 1];
-  if (min === max) return { min, max, bins: [{ lo: min, hi: max, count: sorted.length }] };
-  const width = (max - min) / binCount;
-  const bins = [];
-  for (let i = 0; i < binCount; i++) {
-    bins.push({ lo: min + i * width, hi: min + (i + 1) * width, count: 0 });
-  }
-  for (const v of sorted) {
-    let idx = Math.floor((v - min) / width);
-    if (idx >= binCount) idx = binCount - 1;
-    bins[idx].count++;
-  }
-  return { min, max, bins };
-}
-
 // ---- export helpers ----
 function csvEscape(v) {
   if (v === null || v === undefined) return '';
@@ -876,12 +907,6 @@ function renderSkeleton(N, cfg) {
   }
   html.push('</div>');
   html.push('<div class="text-xs font-medium mt-3" style="color: var(--text-dim);" id="timelineFooter">Started: —</div>');
-  html.push('</div>');
-
-  // Latency panel — populated by finalizeRender
-  html.push('<div class="neo-panel p-6" id="latencyPanel">');
-  html.push('<h3 class="text-sm font-bold uppercase tracking-wider mb-4" style="color: var(--text-dim);">Latency Distribution</h3>');
-  html.push('<div id="latencyBody" style="color: var(--text-dim); font-size: 0.85rem;">Awaiting results…</div>');
   html.push('</div>');
 
   // Per-request table — populated by finalizeRender
@@ -1064,83 +1089,8 @@ function finalizeRender(data) {
     appendTableRow(r);
   });
 
-  // Latency panel.
-  renderLatencyPanel(data);
-
   // Export buttons.
   wireExportButtons(data);
-}
-
-function renderLatencyPanel(data) {
-  const body = document.getElementById('latencyBody');
-  if (!body) return;
-  const success = data.results.filter(r => r.status === 'success');
-  const ttfts = success.map(r => r.ttft_s).filter(v => typeof v === 'number');
-  const tps = success.map(r => r.tokens_per_sec).filter(v => typeof v === 'number');
-
-  if (success.length === 0) {
-    body.innerHTML = '<div style="color: var(--text-dim);">No successful requests to summarize.</div>';
-    return;
-  }
-
-  const ttftStats = summary(ttfts);
-  const ttftP50 = percentile(ttfts, 50);
-  const ttftP90 = percentile(ttfts, 90);
-  const ttftP99 = percentile(ttfts, 99);
-  const ttftMax = ttftStats ? ttftStats.max : null;
-
-  const tpStats = summary(tps);
-
-  let html = '';
-  html += '<div class="mb-4">';
-  html += '<div class="text-xs font-bold uppercase tracking-wider mb-2" style="color: var(--text-dim);">TTFT (seconds) — n=' + ttftStats.count + '</div>';
-  html += '<div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
-  html += miniStat(ttftP50 !== null ? ttftP50 + 's' : '—', 'p50');
-  html += miniStat(ttftP90 !== null ? ttftP90 + 's' : '—', 'p90');
-  html += miniStat(ttftP99 !== null ? ttftP99 + 's' : '—', 'p99');
-  html += miniStat(ttftMax !== null ? ttftMax + 's' : '—', 'max');
-  html += '</div>';
-  if (ttftStats && ttftStats.count >= 4) {
-    html += renderHistogram(ttfts, 'var(--accent-yellow)');
-  } else {
-    html += '<div class="text-xs mt-2" style="color: var(--text-dim); opacity: 0.8;">Histogram hidden — need 4+ samples.</div>';
-  }
-  html += '</div>';
-
-  html += '<div>';
-  html += '<div class="text-xs font-bold uppercase tracking-wider mb-2" style="color: var(--text-dim);">Throughput (tokens/sec) — n=' + (tpStats ? tpStats.count : 0) + '</div>';
-  if (tpStats) {
-    html += '<div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
-    html += miniStat(tpStats.min, 'min');
-    html += miniStat(tpStats.median, 'median');
-    html += miniStat(tpStats.mean, 'mean');
-    html += miniStat(tpStats.max, 'max');
-    html += '</div>';
-    if (tpStats.count >= 4) html += renderHistogram(tps, 'var(--accent-green-btn)');
-    else html += '<div class="text-xs mt-2" style="color: var(--text-dim); opacity: 0.8;">Histogram hidden — need 4+ samples.</div>';
-  } else {
-    html += '<div style="color: var(--text-dim);">No throughput data.</div>';
-  }
-  html += '</div>';
-
-  body.innerHTML = html;
-}
-
-function renderHistogram(arr, color) {
-  const binCount = Math.min(12, Math.max(4, arr.length));
-  const h = histogramBins(arr, binCount);
-  if (!h) return '';
-  const maxCount = h.bins.reduce((m, b) => Math.max(m, b.count), 0);
-  let html = '<div class="hist-row" style="margin-top: 0.5rem;">';
-  h.bins.forEach(b => {
-    const pct = maxCount > 0 ? (b.count / maxCount) * 100 : 0;
-    html += '<div class="hist-cell" title="' + b.lo.toFixed(3) + ' → ' + b.hi.toFixed(3) + ' · n=' + b.count + '">';
-    html += '<div class="hist-bar" style="width:' + pct + '%; background-color:' + color + ';"></div>';
-    html += '<div class="hist-label">' + b.count + '</div>';
-    html += '</div>';
-  });
-  html += '</div>';
-  return html;
 }
 
 function wireExportButtons(data) {

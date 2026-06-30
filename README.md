@@ -21,11 +21,13 @@ same-origin policy no longer applies.
   request's first chunk arrives.
 - **Live timeline.** The chart updates in real time during a run — wait →
   first chunk → completion segments per request, no waiting for `Promise.all`.
-- **Latency distribution.** TTFT p50 / p90 / p99 / max and throughput
-  min / median / mean / max, plus small CSS-bar histograms (≥ 4 samples).
 - **Overlap-ratio verdict.** `sum-of-durations / wall-time` is compared to
   the requested concurrency and labeled **concurrent**, **partial**, or
   **sequential**.
+- **Model picker.** Click "Fetch models" next to the MODEL label and the
+  page will call `/v1/models` on the configured endpoint, then populate a
+  dropdown next to the input. The text input stays editable — you can
+  still type custom model names.
 - **Export.** One-click JSON or CSV download of the entire run, plus a
   "Copy summary" button that puts the same JSON on the clipboard.
 - **Light/heavy presets.** One-click config for a 3-request smoke test or a
@@ -145,8 +147,7 @@ doubled.
 
 API key, endpoint, model, and provider selection are persisted in
 `localStorage` under `llmct_*` keys. The theme preference uses
-`llmct_theme`. Nothing else is stored — runs, exports, and the latency
-distribution are session-only.
+`llmct_theme`. Nothing else is stored — runs and exports are session-only.
 
 ## Repo layout
 
