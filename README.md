@@ -10,12 +10,16 @@ If the API blocks browser-origin (CORS) requests, a small companion
 Chrome extension relays the requests through a background service worker
 so the same-origin policy no longer applies.
 
-- **Web page:** a single `index.html` — open it directly, host it on
-  GitHub Pages at `https://0xaungkon.github.io/llm-concurrency-test/`, or
-  run a local server.
 - **Extension:** under `extension/` — a 4-file MV3 add-on that adds a CORS
   bypass.
 - **No backend.** Your API key never leaves your browser.
+
+## Quick start
+
+👉 **https://0xaungkon.github.io/llm-concurrency-test/**
+
+That's it — open the URL, paste your API key + endpoint + model, hit
+**RUN TEST**.
 
 ## Features
 
@@ -39,19 +43,19 @@ so the same-origin policy no longer applies.
 - **No persistence of test history** beyond your API key and config in
   `localStorage`. Each run lives only in the current DOM.
 
-## Quick start (web page)
+## Configuring the page
 
-Open `index.html` in a browser:
+The page is a single `index.html`. You can run it three ways:
 
-- **Double-click** the file (loads over `file://`).
-- **Or** serve it locally:
+- **Use the hosted copy** at the URL above — no setup required.
+- **Open the file directly** in your browser (loads over `file://`).
+- **Serve it locally:**
   ```bash
   python3 -m http.server 8000
   # then visit http://localhost:8000/
   ```
-- **Or** enable GitHub Pages on `main` (root) and visit the published URL.
 
-Then fill in:
+Once it's open, fill in:
 
 | Field         | Example                                    |
 | ------------- | ------------------------------------------ |
@@ -66,7 +70,9 @@ Click **RUN TEST**.
 
 The auto-resolved endpoint on blur means you can paste a base URL
 (`https://api.openai.com/v1`) and the page will fill in the right
-`/chat/completions` or `/v1/messages` for you.
+`/chat/completions` or `/v1/messages` for you. Toggling between
+OpenAI and Anthropic provider buttons no longer rewrites an already-resolved
+endpoint, so your URL is preserved.
 
 ## CORS bypass (Chrome extension)
 
