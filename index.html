@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LLM Concurrency Test</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    --bg-page: #fdfbf7;
+    --bg-header: #ffffff;
+    --bg-panel: #faebd7;
+    --bg-input: #eff3f8;
+    --bg-warn: #fff9e6;
+    --border-color: #1a1a1a;
+    --shadow-color: #1a1a1a;
+    --text: #1a1a1a;
+    --text-dim: #4a4a4a;
+    --accent-yellow: #ffcf7a;
+    --accent-green-btn: #a8f0c6;
+    --fill-success: #a8f0c6;
+    --text-success: #14532d;
+    --fill-danger: #ffb4b4;
+    --text-danger: #7f1d1d;
+    --fill-warn: #ffe9a8;
+    --text-warn: #7c4a03;
+  }
+  html.dark {
+    --bg-page: #15171c;
+    --bg-header: #1b1e24;
+    --bg-panel: #20242c;
+    --bg-input: #262b35;
+    --bg-warn: #2a2410;
+    --border-color: #f5f0e8;
+    --shadow-color: #f5f0e8;
+    --text: #f5f0e8;
+    --text-dim: #b8bcc4;
+    --accent-yellow: #d9a441;
+    --accent-green-btn: #5fd996;
+    --fill-success: #14532d;
+    --text-success: #86efac;
+    --fill-danger: #7f1d1d;
+    --text-danger: #fca5a5;
+    --fill-warn: #78350f;
+    --text-warn: #fde68a;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-page);
+    color: var(--text);
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .neo-border { border: 3px solid var(--border-color); border-radius: 8px; }
+  .neo-shadow { box-shadow: 4px 4px 0px 0px var(--shadow-color); }
+  .neo-input {
+    background-color: var(--bg-input);
+    border: 3px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.75rem;
+    font-weight: 500;
+    color: var(--text);
+    transition: all 0.2s ease;
+  }
+  .neo-input::placeholder { color: var(--text-dim); opacity: 0.75; font-weight: 400; }
+  .neo-input:focus { outline: none; box-shadow: 2px 2px 0px 0px var(--shadow-color); }
+  .neo-button {
+    background-color: var(--accent-yellow);
+    border: 3px solid var(--border-color);
+    border-radius: 6px;
+    font-weight: 700;
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    box-shadow: 4px 4px 0px 0px var(--shadow-color);
+    transition: transform 0.1s, box-shadow 0.1s;
+    color: var(--text);
+  }
+  .neo-button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px 0px var(--shadow-color); }
+  .neo-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: 4px 4px 0px 0px var(--shadow-color); }
+  .neo-button-green { background-color: var(--accent-green-btn); }
+  .neo-panel {
+    background-color: var(--bg-panel);
+    border: 4px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 8px 8px 0px 0px var(--shadow-color);
+  }
+  .label-text { font-size: 0.875rem; font-weight: 600; color: var(--text-dim); margin-bottom: 0.25rem; display: block; }
+  .sparkle { position: absolute; width: 40px; height: 40px; }
+
+  .stat-box { background-color: var(--bg-header); border: 3px solid var(--border-color); border-radius: 8px; padding: 1rem; }
+  .stat-box .v { font-size: 1.4rem; font-weight: 800; }
+  .stat-box .l { font-size: 0.7rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+  .verdict-box { border: 3px solid var(--border-color); border-radius: 8px; padding: 1rem 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 0.6rem; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--border-color); }
+
+  .track { background-color: var(--bg-input); border: 2px solid var(--border-color); border-radius: 5px; height: 20px; position: relative; overflow: hidden; }
+  .bar { position: absolute; top: 0; bottom: 0; }
+
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .data-table th { text-align: left; padding: 0.5rem 0.65rem; border-bottom: 3px solid var(--border-color); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); font-weight: 700; }
+  .data-table td { padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--border-color); }
+  .data-table tr:last-child td { border-bottom: none; }
+
+  .empty-state { color: var(--text-dim); padding: 2rem 0; text-align: center; font-weight: 500; }
+
+  .provider-toggle { display: inline-flex; border: 3px solid var(--border-color); border-radius: 6px; overflow: hidden; }
+  .provider-btn { padding: 0.6rem 1.1rem; font-size: 0.8rem; font-weight: 700; cursor: pointer; border: none; background-color: var(--bg-header); color: var(--text); }
+  .provider-btn + .provider-btn { border-left: 3px solid var(--border-color); }
+  .provider-btn.active { background-color: var(--accent-yellow); }
+
+  .validation-msg { font-size: 0.8rem; font-weight: 600; color: var(--text-danger); }
+
+  .hist-row { display: flex; align-items: flex-end; gap: 4px; height: 56px; padding-top: 4px; }
+  .hist-cell { flex: 1; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; min-width: 0; }
+  .hist-bar { height: 36px; min-width: 4px; border: 2px solid var(--border-color); border-radius: 3px; box-shadow: 2px 2px 0 0 var(--shadow-color); transition: width 0.15s ease; }
+  .hist-label { font-size: 0.65rem; font-weight: 700; text-align: center; margin-top: 4px; color: var(--text-dim); }
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<header class="flex items-center justify-between px-8 py-4 border-b-[3px]" style="background-color: var(--bg-header); border-color: var(--border-color);">
+  <div class="flex items-center gap-4">
+    <h1 class="text-xl font-bold tracking-tight">LLM<span class="text-red-500">Test</span></h1>
+  </div>
+  <button id="themeToggle" class="neo-border flex items-center gap-2 px-3 py-1.5 text-sm font-semibold" style="background-color: var(--bg-header);" onclick="toggleTheme()">
+    <svg id="iconMoon" fill="none" height="14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="14"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+    <svg id="iconSun" class="hidden" fill="none" height="14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="14"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+    <span id="themeLabel">Dark mode</span>
+  </button>
+</header>
+
+<main class="flex-grow flex flex-col items-center justify-start pt-12 pb-24 px-4 relative overflow-hidden">
+
+  <svg class="sparkle top-20 left-32 text-red-400" fill="currentColor" stroke="black" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l2.4 7.6H22l-6.2 4.5 2.4 7.6-6.2-4.5-6.2 4.5 2.4-7.6L2 9.6h7.6z"></path></svg>
+  <svg class="sparkle top-40 right-40 text-green-400" fill="currentColor" stroke="black" stroke-width="2" style="width: 30px; height: 30px; transform: rotate(15deg);" viewBox="0 0 24 24"><path d="M12 2l2.4 7.6H22l-6.2 4.5 2.4 7.6-6.2-4.5-6.2 4.5 2.4-7.6L2 9.6h7.6z"></path></svg>
+
+  <div class="text-center max-w-2xl mb-8 relative z-10">
+    <div class="text-xs font-bold uppercase tracking-widest mb-2" style="color: var(--text-dim);">LLM API • LOAD TEST • CLIENT-SIDE</div>
+    <h2 class="text-5xl md:text-6xl font-extrabold leading-tight mb-4 tracking-tight">LLM Concurrency <br/> Test</h2>
+    <p class="text-lg font-medium px-4" style="color: var(--text-dim);">
+      Fires N simultaneous requests directly from your browser and measures whether they run in parallel.
+    </p>
+  </div>
+
+  <div class="max-w-4xl w-full mb-4 relative z-10">
+    <div class="neo-border p-4 text-sm font-medium leading-relaxed" style="background-color: var(--bg-warn);">
+      Runs entirely in your browser — no server, no relay. This only works if the API allows cross-origin (CORS) requests from a browser. If it doesn't, every request below will fail with a generic network/CORS error and there is no client-side fix for that; you'd need a server-side proxy instead. Your API key is stored only in this browser's localStorage and sent directly to the endpoint you configure — fine for ad-hoc testing, not for a key you intend to keep fully secret.
+    </div>
+  </div>
+
+  <div id="corsBanner" class="max-w-4xl w-full mb-8 relative z-10 hidden">
+    <div class="neo-border p-4 text-sm font-medium leading-relaxed flex items-start gap-3" style="background-color: var(--bg-input);">
+      <span style="font-size: 1.1rem;">⚠️</span>
+      <div>
+        <div class="font-bold mb-1">Requests blocked by CORS?</div>
+        <div>If your API provider doesn't allow browser-origin requests, install the
+          <a id="corsExtLink" href="https://github.com/aungkon/llmct-extension" target="_blank" rel="noopener" class="underline font-bold">LLM Concurrency Test — CORS Bypass Chrome extension</a>
+          and reload this page. It relays your requests through a background service worker so the browser's same-origin policy no longer applies.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="neo-panel w-full max-w-4xl p-8 relative z-10">
+    <h3 class="text-sm font-bold uppercase tracking-wider mb-6 pb-2" style="color: var(--text-dim); border-bottom: 2px solid var(--text-dim);">Test Configuration</h3>
+    <div class="space-y-6">
+
+      <div>
+        <label class="label-text">PROVIDER</label>
+        <div class="provider-toggle">
+          <button type="button" class="provider-btn active" id="providerBtnOpenai" onclick="setProvider('openai')">OpenAI-compatible</button>
+          <button type="button" class="provider-btn" id="providerBtnAnthropic" onclick="setProvider('anthropic')">Anthropic</button>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="label-text">API KEY</label>
+          <input id="apiKey" class="neo-input w-full" type="password" value="" placeholder="sk-... or your provider's API key" autocomplete="off"/>
+        </div>
+        <div>
+          <label class="label-text">ENDPOINT URL</label>
+          <input id="endpoint" class="neo-input w-full" type="text" value="" placeholder="Base URL or full endpoint, e.g. https://api.openai.com/v1"/>
+          <div class="text-xs mt-1" style="color: var(--text-dim);">Base URL is auto-resolved to the full endpoint on blur (OpenAI → <code>/chat/completions</code>, Anthropic → <code>/v1/messages</code>). A full URL you already pasted is left untouched.</div>
+        </div>
+        <div>
+          <label class="label-text">MODEL</label>
+          <input id="model" class="neo-input w-full" type="text" value="" placeholder="e.g. gpt-4o-mini · claude-opus-4-6 · glm-4.7-flash"/>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label class="label-text">CONCURRENCY</label>
+          <input id="concurrency" class="neo-input w-full" type="number" value="5" min="1" max="50"/>
+        </div>
+        <div>
+          <label class="label-text">MAX TOKENS</label>
+          <input id="maxTokens" class="neo-input w-full" type="number" value="200" min="1" max="4000"/>
+        </div>
+        <div>
+          <label class="label-text">TIMEOUT (S)</label>
+          <input id="timeout" class="neo-input w-full" type="number" value="60" min="1" max="300"/>
+        </div>
+        <div>
+          <label class="label-text">TEMPERATURE</label>
+          <input id="temperature" class="neo-input w-full" step="0.1" type="number" value="1" min="0" max="2"/>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label class="label-text">TOP P</label>
+          <input id="topP" class="neo-input w-full" step="0.1" type="number" value="1" min="0" max="1"/>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="label-text">SYSTEM PROMPT</label>
+          <textarea id="systemPrompt" class="neo-input w-full resize-y h-24">You are a helpful assistant.</textarea>
+        </div>
+        <div>
+          <label class="label-text">USER MESSAGE</label>
+          <textarea id="prompt" class="neo-input w-full resize-y h-24">hi</textarea>
+        </div>
+      </div>
+
+      <div class="pt-2 flex flex-col md:flex-row justify-between items-center gap-4">
+        <button id="runBtn" class="neo-button neo-button-green text-lg px-8 py-3 w-full md:w-auto text-center flex justify-center items-center gap-2" type="button" onclick="runTest()">
+          <span id="runLabel">RUN TEST</span>
+          <svg fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="20"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+        </button>
+        <div class="flex gap-2 w-full md:w-auto">
+          <button class="neo-border px-4 py-2 text-sm font-bold transition-colors w-1/2 md:w-auto" style="background-color: var(--bg-header);" type="button" onclick="applyPreset('light')">Light load</button>
+          <button class="neo-border px-4 py-2 text-sm font-bold transition-colors w-1/2 md:w-auto" style="background-color: var(--bg-header);" type="button" onclick="applyPreset('heavy')">Heavy load</button>
+        </div>
+      </div>
+      <div id="validationMsg" class="validation-msg hidden">Fill in API key, endpoint, and model before running a test.</div>
+
+    </div>
+  </div>
+
+  <div id="output" class="w-full max-w-4xl mt-8 relative z-10 space-y-6"></div>
+
+  <svg class="absolute bottom-10 left-10 z-0" style="width: 80px; height: 80px; color: var(--accent-green-btn); opacity: 0.5;" fill="currentColor" stroke="black" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 2c5.52 0 10 4.48 10 10s-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 4c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z"></path></svg>
+</main>
+
+<script>
+/* ---------- Theme ---------- */
+function toggleTheme() {
+  const html = document.documentElement;
+  const goingDark = !html.classList.contains('dark');
+  html.classList.toggle('dark', goingDark);
+  document.getElementById('themeLabel').textContent = goingDark ? 'Light mode' : 'Dark mode';
+  document.getElementById('iconMoon').classList.toggle('hidden', goingDark);
+  document.getElementById('iconSun').classList.toggle('hidden', !goingDark);
+  try { localStorage.setItem('llmct_theme', goingDark ? 'dark' : 'light'); } catch (e) {}
+}
+
+/* ---------- Persistence (api key / endpoint / model / provider) ---------- */
+function saveField(key, value) {
+  try { localStorage.setItem('llmct_' + key, value); } catch (e) {}
+}
+function loadField(key) {
+  try { return localStorage.getItem('llmct_' + key); } catch (e) { return null; }
+}
+
+/* ---------- Transport shim (extension relay + fetch fallback) ----------
+ * When the Chrome extension's content script has set window.__llmctExtensionBridge,
+ * page-side fetches are relayed through a background service worker that has
+ * host_permissions to all URLs — bypassing the browser's same-origin policy.
+ * Otherwise we fall back to plain fetch() and accept the browser's CORS rules.
+ *
+ * Wire protocol (page ↔ content script):
+ *   page → content (postMessage): { type: 'llmct:fetch', id, url, method, headers, body }
+ *   content → page (postMessage): { type: 'llmct:fetch:meta',   id, status, statusText, headers }
+ *                                { type: 'llmct:fetch:chunk',  id, chunk }   // Uint8Array
+ *                                { type: 'llmct:fetch:end',    id }
+ *                                { type: 'llmct:fetch:error',  id, error }
+ */
+const __llmctFetchRegistry = new Map(); // id → { resolveMeta, stream: ReadableStreamDefaultController, endResolve, error }
+let __llmctFetchNextId = 1;
+
+if (!window.__llmctExtensionBridge) {
+  // Make sure window.__llmctExtensionBridge is defined (falsy) so the page logic
+  // doesn't trip on a missing property check.
+  try { Object.defineProperty(window, '__llmctExtensionBridge', { value: false, writable: false, configurable: false }); } catch (e) {}
+}
+
+window.addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || typeof d !== 'object' || !d.type || !d.type.startsWith('llmct:fetch:')) return;
+  // Ignore messages not originating from this window (defensive).
+  if (e.source !== window) return;
+  const entry = __llmctFetchRegistry.get(d.id);
+  if (!entry) return;
+  if (d.type === 'llmct:fetch:meta') {
+    entry.meta = { status: d.status, statusText: d.statusText || '', headers: d.headers || {} };
+    entry.resolveMeta(entry.meta);
+  } else if (d.type === 'llmct:fetch:chunk') {
+    // d.chunk is a Uint8Array; the ReadableStream controller queues it.
+    try { entry.controller.enqueue(d.chunk); } catch (err) { /* stream closed */ }
+  } else if (d.type === 'llmct:fetch:end') {
+    try { entry.controller.close(); } catch (err) { /* already closed */ }
+    __llmctFetchRegistry.delete(d.id);
+  } else if (d.type === 'llmct:fetch:error') {
+    try { entry.controller.error(new Error(d.error || 'relay error')); } catch (err) { /* ignore */ }
+    __llmctFetchRegistry.delete(d.id);
+  }
+});
+
+async function llmctFetch(url, init) {
+  if (!window.__llmctExtensionBridge) {
+    return fetch(url, init);
+  }
+  const id = __llmctFetchNextId++;
+  const method = (init && init.method) || 'GET';
+  const headers = {};
+  if (init && init.headers) {
+    if (init.headers instanceof Headers) {
+      init.headers.forEach((v, k) => { headers[k] = v; });
+    } else if (Array.isArray(init.headers)) {
+      init.headers.forEach(([k, v]) => { headers[k] = v; });
+    } else {
+      Object.assign(headers, init.headers);
+    }
+  }
+  // Body must be transferable. JSON-stringify for our use case; if a caller passes a
+  // Blob/FormData, we fall back to plain fetch.
+  let body = null;
+  if (init && init.body !== undefined && init.body !== null) {
+    if (typeof init.body === 'string') body = init.body;
+    else return fetch(url, init); // unsupported body type for relay
+  }
+  const metaPromise = new Promise((resolve) => {
+    const entry = { resolveMeta: resolve, controller: null };
+    __llmctFetchRegistry.set(id, entry);
+  });
+  window.postMessage({ type: 'llmct:fetch', id, url, method, headers, body }, '*');
+  const meta = await metaPromise;
+  const stream = new ReadableStream({
+    start(controller) {
+      const entry = __llmctFetchRegistry.get(id);
+      if (entry) entry.controller = controller;
+    }
+  });
+  return new Response(stream, {
+    status: meta.status,
+    statusText: meta.statusText,
+    headers: meta.headers,
+  });
+}
+
+/* ---------- Provider + endpoint normalization ---------- */
+let currentProvider = 'openai';
+
+function normalizeEndpoint(provider, raw) {
+  let url = (raw || '').trim();
+  if (!url) return url;
+  url = url.replace(/\/+$/, '');
+  if (provider === 'anthropic') {
+    if (/\/messages$/i.test(url)) return url;
+    if (/\/v1$/i.test(url)) return url + '/messages';
+    return url + '/v1/messages';
+  }
+  if (/\/chat\/completions$/i.test(url)) return url;
+  return url + '/chat/completions';
+}
+
+function setProvider(provider) {
+  currentProvider = provider;
+  document.getElementById('providerBtnOpenai').classList.toggle('active', provider === 'openai');
+  document.getElementById('providerBtnAnthropic').classList.toggle('active', provider === 'anthropic');
+  saveField('provider', provider);
+  const endpointEl = document.getElementById('endpoint');
+  if (endpointEl.value.trim()) {
+    endpointEl.value = normalizeEndpoint(provider, endpointEl.value);
+    saveField('endpoint', endpointEl.value);
+  }
+}
+
+/* ---------- Run-button validation ---------- */
+function validateRunButton() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const endpoint = document.getElementById('endpoint').value.trim();
+  const model = document.getElementById('model').value.trim();
+  const valid = !!(apiKey && endpoint && model);
+  const btn = document.getElementById('runBtn');
+  const msg = document.getElementById('validationMsg');
+  if (!btn.dataset.running) {
+    btn.disabled = !valid;
+  }
+  msg.classList.toggle('hidden', valid);
+  return valid;
+}
+
+/* ---------- Init ---------- */
+(function init() {
+  let savedTheme = null;
+  try { savedTheme = localStorage.getItem('llmct_theme'); } catch (e) {}
+  if (savedTheme === 'dark') document.documentElement.classList.add('dark');
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const isDark = document.documentElement.classList.contains('dark');
+    document.getElementById('themeLabel').textContent = isDark ? 'Light mode' : 'Dark mode';
+    document.getElementById('iconMoon').classList.toggle('hidden', isDark);
+    document.getElementById('iconSun').classList.toggle('hidden', !isDark);
+
+    const savedApiKey = loadField('apiKey');
+    const savedEndpoint = loadField('endpoint');
+    const savedModel = loadField('model');
+    const savedProvider = loadField('provider');
+
+    if (savedApiKey) document.getElementById('apiKey').value = savedApiKey;
+    if (savedModel) document.getElementById('model').value = savedModel;
+    setProvider(savedProvider === 'anthropic' ? 'anthropic' : 'openai');
+    if (savedEndpoint) document.getElementById('endpoint').value = normalizeEndpoint(currentProvider, savedEndpoint);
+
+    ['apiKey', 'model'].forEach(id => {
+      document.getElementById(id).addEventListener('input', (e) => {
+        saveField(id, e.target.value);
+        validateRunButton();
+      });
+    });
+    const endpointEl = document.getElementById('endpoint');
+    endpointEl.addEventListener('input', (e) => {
+      saveField('endpoint', e.target.value);
+      validateRunButton();
+    });
+    endpointEl.addEventListener('blur', (e) => {
+      e.target.value = normalizeEndpoint(currentProvider, e.target.value);
+      saveField('endpoint', e.target.value);
+      validateRunButton();
+    });
+
+    validateRunButton();
+
+    // Show the CORS-bypass banner only if the extension bridge is not present.
+    // The content script (extension/content.js) sets window.__llmctExtensionBridge = true
+    // at document_start. We re-check after a tick in case it was injected late.
+    const showCorsBanner = () => {
+      const hasBridge = !!(window.__llmctExtensionBridge);
+      const banner = document.getElementById('corsBanner');
+      if (banner) banner.classList.toggle('hidden', hasBridge);
+    };
+    showCorsBanner();
+    setTimeout(showCorsBanner, 250);
+    setTimeout(showCorsBanner, 1500);
+  });
+})();
+
+function applyPreset(kind) {
+  if (kind === 'light') {
+    document.getElementById('concurrency').value = 3;
+    document.getElementById('maxTokens').value = 100;
+  } else if (kind === 'heavy') {
+    document.getElementById('concurrency').value = 15;
+    document.getElementById('maxTokens').value = 400;
+  }
+}
+
+/* ---------- Request execution ---------- */
+
+// SSE parser state is created per-request. Callbacks:
+//   onFirstChunk()  — fired exactly once on the first parsed chunk (sets TTFT).
+//   onToken(n)      — fired for each parsed chunk that yields usable data
+//                     (currently informational only; tokens_per_sec uses usage).
+//   onUsage(n)      — fired when a chunk supplies a completion-token count
+//                     (OpenAI final chunk, Anthropic message_delta).
+async function callOnce(idx, cfg, testStart, onEvent) {
+  onEvent = onEvent || function () {};
+  const startPerf = performance.now();
+  const startIso = new Date().toISOString();
+  const result = {
+    index: idx,
+    start_offset_s: +((startPerf - testStart) / 1000).toFixed(3),
+    start_iso: startIso,
+    status: 'error',
+    http_status: null,
+    completion_tokens: 0,
+    tokens_per_sec: 0,
+    error: null,
+    first_chunk_offset_s: null,
+    ttft_s: null,
+    stream_status: 'ok',
+  };
+  onEvent({ type: 'start', result });
+
+  let headers, bodyObj;
+  if (cfg.provider === 'anthropic') {
+    headers = {
+      'x-api-key': cfg.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'Content-Type': 'application/json',
+    };
+    bodyObj = {
+      model: cfg.model,
+      messages: [{ role: 'user', content: cfg.prompt }],
+      max_tokens: cfg.maxTokens,
+      temperature: cfg.temperature,
+      top_p: cfg.topP,
+      stream: true,
+    };
+    if (cfg.systemPrompt && cfg.systemPrompt.trim() !== '') {
+      bodyObj.system = cfg.systemPrompt;
+    }
+  } else {
+    headers = {
+      'Authorization': 'Bearer ' + cfg.apiKey,
+      'Content-Type': 'application/json',
+    };
+    const messages = [];
+    if (cfg.systemPrompt && cfg.systemPrompt.trim() !== '') {
+      messages.push({ role: 'system', content: cfg.systemPrompt });
+    }
+    messages.push({ role: 'user', content: cfg.prompt });
+    bodyObj = {
+      model: cfg.model,
+      messages: messages,
+      stream: true,
+      stream_options: { include_usage: true },
+      temperature: cfg.temperature,
+      top_p: cfg.topP,
+      max_tokens: cfg.maxTokens,
+    };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), cfg.timeout * 1000);
+
+  const stampFirstChunk = () => {
+    if (result.first_chunk_offset_s !== null) return;
+    const now = performance.now();
+    result.first_chunk_offset_s = +((now - testStart) / 1000).toFixed(3);
+    result.ttft_s = +(result.first_chunk_offset_s - result.start_offset_s).toFixed(3);
+    onEvent({ type: 'first_chunk', result });
+  };
+
+  try {
+    const res = await llmctFetch(cfg.endpoint, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(bodyObj),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const endPerf = performance.now();
+    const duration = (endPerf - startPerf) / 1000;
+    result.http_status = res.status;
+    result.end_offset_s = +((endPerf - testStart) / 1000).toFixed(3);
+    result.end_iso = new Date().toISOString();
+    result.duration_s = +duration.toFixed(3);
+
+    if (!res.ok) {
+      result.status = 'http_error';
+      result.error = (await res.text()).slice(0, 300);
+      onEvent({ type: 'end', result });
+      return result;
+    }
+
+    // Drain the SSE stream. Track whether we ever produced a parsed chunk.
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let chunkCount = 0;
+    let completionTokens = 0;
+
+    // Per-provider parsers receive one logical event at a time.
+    // Anthropic SSE: lines come as `event: <name>` paired with `data: <json>`,
+    // separated by blank lines. Track the current event name.
+    let anthropicEvent = null;
+
+    const handleOpenAIChunk = (obj) => {
+      chunkCount++;
+      stampFirstChunk();
+      if (obj.usage && typeof obj.usage.completion_tokens === 'number') {
+        completionTokens = obj.usage.completion_tokens;
+      }
+      onEvent({ type: 'chunk', result });
+    };
+
+    const handleAnthropicChunk = (eventName, obj) => {
+      chunkCount++;
+      // Skip keepalive pings but still count them as "we're receiving data".
+      if (eventName === 'ping') return;
+      stampFirstChunk();
+      if (eventName === 'message_delta' && obj.usage && typeof obj.usage.output_tokens === 'number') {
+        completionTokens = obj.usage.output_tokens;
+      } else if (eventName === 'message_start' && obj.message && obj.message.usage && typeof obj.message.usage.output_tokens === 'number' && completionTokens === 0) {
+        completionTokens = obj.message.usage.output_tokens;
+      }
+      onEvent({ type: 'chunk', result });
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE events are separated by a blank line (`\n\n`).
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        if (!rawEvent) continue;
+
+        const lines = rawEvent.split('\n');
+        if (cfg.provider === 'anthropic') {
+          let dataPayload = null;
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              anthropicEvent = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              dataPayload = line.slice(5).trim();
+            }
+          }
+          if (!dataPayload) continue;
+          let parsed;
+          try { parsed = JSON.parse(dataPayload); } catch (e) { continue; }
+          handleAnthropicChunk(anthropicEvent, parsed);
+          if (anthropicEvent === 'message_stop') { /* let the loop end naturally */ }
+        } else {
+          // OpenAI-compatible: every line is `data: <payload>` or `data:[DONE]`.
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const payload = line.slice(5).trim();
+            if (payload === '[DONE]') continue;
+            let parsed;
+            try { parsed = JSON.parse(payload); } catch (e) { continue; }
+            handleOpenAIChunk(parsed);
+          }
+        }
+      }
+    }
+
+    result.completion_tokens = completionTokens;
+    // If we never saw a usage chunk, fall back to nothing — tokens_per_sec stays 0
+    // and the duration is reported via the timeline. Don't fabricate.
+    result.tokens_per_sec = duration > 0 ? +(completionTokens / duration).toFixed(2) : 0;
+    result.status = 'success';
+    result.stream_status = chunkCount > 0 ? 'ok' : 'empty';
+    onEvent({ type: 'end', result });
+    return result;
+  } catch (e) {
+    clearTimeout(timer);
+    const endPerf = performance.now();
+    result.end_offset_s = +((endPerf - testStart) / 1000).toFixed(3);
+    result.end_iso = new Date().toISOString();
+    result.duration_s = +((endPerf - startPerf) / 1000).toFixed(3);
+    if (e.name === 'AbortError' || (e.message || '').toLowerCase().includes('abort')) {
+      result.status = 'timeout';
+      result.error = 'No response within ' + cfg.timeout + 's';
+    } else {
+      result.status = 'exception';
+      result.error = (e.message || 'Network error') + ' (likely CORS — the API blocked this browser origin)';
+    }
+    onEvent({ type: 'end', result });
+    return result;
+  }
+}
+
+async function runTest() {
+  if (!validateRunButton()) return;
+
+  const endpointEl = document.getElementById('endpoint');
+  endpointEl.value = normalizeEndpoint(currentProvider, endpointEl.value);
+  saveField('endpoint', endpointEl.value);
+
+  const btn = document.getElementById('runBtn');
+  const runLabel = document.getElementById('runLabel');
+  btn.dataset.running = '1';
+  btn.disabled = true;
+  runLabel.textContent = 'RUNNING…';
+
+  const cfg = {
+    provider: currentProvider,
+    apiKey: document.getElementById('apiKey').value,
+    endpoint: endpointEl.value,
+    model: document.getElementById('model').value,
+    systemPrompt: document.getElementById('systemPrompt').value,
+    prompt: document.getElementById('prompt').value,
+    concurrency: parseInt(document.getElementById('concurrency').value, 10),
+    maxTokens: parseInt(document.getElementById('maxTokens').value, 10),
+    timeout: parseFloat(document.getElementById('timeout').value),
+    temperature: parseFloat(document.getElementById('temperature').value),
+    topP: parseFloat(document.getElementById('topP').value),
+  };
+
+  // Eagerly render the skeleton BEFORE any request fires, so per-request
+  // event handlers always have row elements to mutate.
+  renderSkeleton(cfg.concurrency, cfg);
+
+  const testStart = performance.now();
+  const testStartIso = new Date().toISOString();
+
+  // Make `testStart` available to the paint helpers (they need it for axis math).
+  runCtx = { testStart: testStart, testStartIso: testStartIso };
+
+  const tasks = [];
+  for (let i = 1; i <= cfg.concurrency; i++) {
+    const idx = i;
+    const onEvent = function (evt) {
+      if (evt.type === 'start') paintStart(idx, evt.result);
+      else if (evt.type === 'first_chunk') paintFirstChunk(idx, evt.result);
+      else if (evt.type === 'end') paintEnd(idx, evt.result);
+    };
+    tasks.push(callOnce(idx, cfg, testStart, onEvent));
+  }
+  const results = await Promise.all(tasks);
+  const testEnd = performance.now();
+  const testEndIso = new Date().toISOString();
+  const wallTime = +((testEnd - testStart) / 1000).toFixed(3);
+
+  const successResults = results.filter(r => r.status === 'success');
+  const sumDurations = +successResults.reduce((a, r) => a + r.duration_s, 0).toFixed(3);
+  const totalTokens = successResults.reduce((a, r) => a + r.completion_tokens, 0);
+  const aggTokensPerSec = wallTime > 0 ? +(totalTokens / wallTime).toFixed(2) : 0;
+  const overlapRatio = (wallTime > 0 && sumDurations > 0) ? +(sumDurations / wallTime).toFixed(2) : 0;
+
+  let verdict, verdictKind;
+  if (successResults.length <= 1) {
+    verdict = 'Inconclusive — need 2+ successful requests';
+    verdictKind = 'warn';
+  } else if (overlapRatio >= cfg.concurrency * 0.7) {
+    verdict = 'Concurrent — requests processed in parallel';
+    verdictKind = 'success';
+  } else if (overlapRatio <= 1.3) {
+    verdict = 'Sequential — requests queued one at a time';
+    verdictKind = 'danger';
+  } else {
+    verdict = 'Partial concurrency — limited parallelism';
+    verdictKind = 'warn';
+  }
+
+  finalizeRender({
+    test_start_iso: testStartIso,
+    test_end_iso: testEndIso,
+    wall_time_s: wallTime,
+    concurrency_requested: cfg.concurrency,
+    success_count: successResults.length,
+    total_tokens: totalTokens,
+    aggregate_tokens_per_sec: aggTokensPerSec,
+    overlap_ratio: overlapRatio,
+    verdict: verdict,
+    verdict_kind: verdictKind,
+    results: results,
+  });
+
+  btn.dataset.running = '';
+  runLabel.textContent = 'RUN TEST';
+  validateRunButton();
+}
+
+/* ---------- Rendering ---------- */
+
+// Live-state refs. Populated by renderSkeleton; mutated by paint* / bumpProgress.
+let rowEls = [];        // [{ idx, label, wait, stream, done, durLabel }] length cfg.concurrency
+let latestRun = null;   // last completed run data object (for export)
+let runCtx = null;      // { testStart, wallAxisRef } shared across paint*
+let pendingCount = 0;   // how many requests still in flight
+let runCfg = null;      // config for the current run (used for filenames)
+
+function statBlock(value, label) {
+  return '<div class="stat-box"><div class="v">' + value + '</div><div class="l">' + label + '</div></div>';
+}
+
+function miniStat(value, label) {
+  return '<div class="stat-box" style="padding: 0.6rem 0.75rem;"><div class="v" style="font-size: 1.05rem;">' + value + '</div><div class="l" style="font-size: 0.62rem;">' + label + '</div></div>';
+}
+
+// ---- distribution helpers ----
+function percentile(arr, p) {
+  if (!arr || arr.length === 0) return null;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  if (sorted.length === 1) return sorted[0];
+  const rank = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(rank);
+  const hi = Math.ceil(rank);
+  if (lo === hi) return sorted[lo];
+  return +(sorted[lo] + (sorted[hi] - sorted[lo]) * (rank - lo)).toFixed(3);
+}
+function summary(arr) {
+  if (!arr || arr.length === 0) return null;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const sum = sorted.reduce((a, v) => a + v, 0);
+  return {
+    count: sorted.length,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+    mean: +(sum / sorted.length).toFixed(2),
+    median: sorted.length % 2
+      ? sorted[(sorted.length - 1) / 2]
+      : +((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2).toFixed(3),
+  };
+}
+function histogramBins(arr, binCount) {
+  if (!arr || arr.length === 0) return null;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  if (min === max) return { min, max, bins: [{ lo: min, hi: max, count: sorted.length }] };
+  const width = (max - min) / binCount;
+  const bins = [];
+  for (let i = 0; i < binCount; i++) {
+    bins.push({ lo: min + i * width, hi: min + (i + 1) * width, count: 0 });
+  }
+  for (const v of sorted) {
+    let idx = Math.floor((v - min) / width);
+    if (idx >= binCount) idx = binCount - 1;
+    bins[idx].count++;
+  }
+  return { min, max, bins };
+}
+
+// ---- export helpers ----
+function csvEscape(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function downloadBlob(content, mime, filename) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+function timestampSlug(iso) {
+  return (iso || new Date().toISOString()).replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
+}
+
+// ---- skeleton + live paint ----
+function renderSkeleton(N, cfg) {
+  const output = document.getElementById('output');
+  runCfg = cfg;
+  rowEls = [];
+  pendingCount = N;
+
+  const html = [];
+  html.push('<div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="statRow">');
+  for (let i = 0; i < 5; i++) html.push(statBlock('—', ['Wall Time','Successful','Total Tokens','Agg. Tokens/sec','Overlap Ratio'][i]));
+  html.push('</div>');
+
+  html.push('<div id="verdictBox" class="verdict-box" style="background-color: var(--fill-warn); color: var(--text-warn);">');
+  html.push('<span class="dot" style="background-color: var(--text-warn);"></span>');
+  html.push('<span id="verdictText">Running…</span>');
+  html.push('<span id="verdictProgress" style="margin-left: auto; font-weight: 600; font-size: 0.85rem; opacity: 0.85;">0 / ' + N + ' completed</span>');
+  html.push('</div>');
+
+  html.push('<div id="exportBar" class="flex flex-wrap gap-2">');
+  html.push('<button id="downloadJsonBtn" type="button" class="neo-border px-3 py-2 text-xs font-bold" style="background-color: var(--bg-header);" disabled>Download JSON</button>');
+  html.push('<button id="downloadCsvBtn" type="button" class="neo-border px-3 py-2 text-xs font-bold" style="background-color: var(--bg-header);" disabled>Download CSV</button>');
+  html.push('<button id="copySummaryBtn" type="button" class="neo-border px-3 py-2 text-xs font-bold" style="background-color: var(--bg-header);" disabled>Copy summary</button>');
+  html.push('</div>');
+
+  html.push('<div class="neo-panel p-6">');
+  html.push('<h3 class="text-sm font-bold uppercase tracking-wider mb-4" style="color: var(--text-dim);">Timeline <span id="timelineRange">(0s → running)</span></h3>');
+  html.push('<div id="timelineRows">');
+  for (let i = 1; i <= N; i++) {
+    html.push('<div class="grid items-center gap-3 mb-2" data-row="' + i + '" style="grid-template-columns: 36px 1fr 64px;">');
+    html.push('<div class="text-xs font-semibold text-right" style="color: var(--text-dim);">#' + i + '</div>');
+    html.push('<div class="track" data-track="' + i + '">');
+    html.push('<div class="bar" data-seg="wait" style="left:0%; width:0%; background-color: var(--accent-yellow); opacity: 0.85;"></div>');
+    html.push('<div class="bar" data-seg="stream" style="left:0%; width:0%; background-color: var(--accent-green-btn);"></div>');
+    html.push('<div class="bar" data-seg="done" style="left:0%; width:0%; background-color: var(--accent-yellow);"></div>');
+    html.push('</div>');
+    html.push('<div class="text-xs font-semibold text-right" style="color: var(--text-dim);" data-dur="' + i + '">…</div>');
+    html.push('</div>');
+  }
+  html.push('</div>');
+  html.push('<div class="text-xs font-medium mt-3" style="color: var(--text-dim);" id="timelineFooter">Started: —</div>');
+  html.push('</div>');
+
+  // Latency panel — populated by finalizeRender
+  html.push('<div class="neo-panel p-6" id="latencyPanel">');
+  html.push('<h3 class="text-sm font-bold uppercase tracking-wider mb-4" style="color: var(--text-dim);">Latency Distribution</h3>');
+  html.push('<div id="latencyBody" style="color: var(--text-dim); font-size: 0.85rem;">Awaiting results…</div>');
+  html.push('</div>');
+
+  // Per-request table — populated by finalizeRender
+  html.push('<div class="neo-panel p-6 overflow-x-auto">');
+  html.push('<h3 class="text-sm font-bold uppercase tracking-wider mb-4" style="color: var(--text-dim);">Per-Request Detail</h3>');
+  html.push('<table class="data-table"><thead><tr>');
+  html.push('<th>#</th><th>Start</th><th>End</th><th>Duration</th><th>TTFT</th><th>Tokens</th><th>Tok/sec</th><th>Status</th><th>Note</th>');
+  html.push('</tr></thead><tbody id="perReqTbody"></tbody></table>');
+  html.push('</div>');
+
+  output.innerHTML = html.join('');
+
+  // Capture row element refs.
+  for (let i = 1; i <= N; i++) {
+    const track = output.querySelector('[data-track="' + i + '"]');
+    rowEls.push({
+      idx: i,
+      wait: track.querySelector('[data-seg="wait"]'),
+      stream: track.querySelector('[data-seg="stream"]'),
+      done: track.querySelector('[data-seg="done"]'),
+      durLabel: output.querySelector('[data-dur="' + i + '"]'),
+    });
+  }
+
+  // Footer: started time
+  const startIso = new Date().toISOString();
+  const f = document.getElementById('timelineFooter');
+  if (f) f.textContent = 'Started: ' + startIso;
+}
+
+function axisNow() {
+  return +(performance.now() - runCtx.testStart).toFixed(3);
+}
+
+function repaintAxis(maxSoFar) {
+  // We rescale as wall time grows. After finalize, maxSoFar = data.wall_time_s.
+  // When running, maxSoFar is updated by passing the running max from the painter.
+  const el = document.getElementById('timelineRange');
+  if (el) el.textContent = '(0s → ' + (maxSoFar > 0 ? maxSoFar + 's' : 'running') + ')';
+}
+
+function paintStart(i, result) {
+  const row = rowEls[i - 1];
+  if (!row) return;
+  // Wait segment starts at start_offset_s; we don't yet know where it ends.
+  row.wait.style.left = (result.start_offset_s / Math.max(axisNow(), 0.001) * 100) + '%';
+  row.wait.style.width = '0%';
+  repaintAxis(axisNow());
+}
+
+function paintFirstChunk(i, result) {
+  const row = rowEls[i - 1];
+  if (!row) return;
+  const wall = Math.max(axisNow(), 0.001);
+  row.wait.style.width = Math.max(((result.first_chunk_offset_s - result.start_offset_s) / wall) * 100, 0.4) + '%';
+  row.stream.style.left = (result.first_chunk_offset_s / wall * 100) + '%';
+  row.stream.style.width = '0%';
+}
+
+function paintEnd(i, result) {
+  const row = rowEls[i - 1];
+  if (!row) return;
+  const wall = Math.max(axisNow(), 0.001);
+  const statusColor = result.status === 'success' ? 'var(--fill-success)' : 'var(--fill-danger)';
+  if (result.first_chunk_offset_s !== null) {
+    // We have TTFT: wait segment ends at first_chunk, stream segment ends at end.
+    row.wait.style.width = Math.max(((result.first_chunk_offset_s - result.start_offset_s) / wall) * 100, 0.4) + '%';
+    row.stream.style.left = (result.first_chunk_offset_s / wall * 100) + '%';
+    row.stream.style.width = Math.max(((result.end_offset_s - result.first_chunk_offset_s) / wall) * 100, 0.4) + '%';
+    row.stream.style.backgroundColor = statusColor;
+    row.done.style.left = (result.end_offset_s / wall * 100) + '%';
+    row.done.style.width = '0%';
+  } else {
+    // No TTFT (timeout/exception before any chunk): whole bar colored by status.
+    row.wait.style.width = '0%';
+    row.stream.style.left = (result.start_offset_s / wall * 100) + '%';
+    row.stream.style.width = Math.max(((result.end_offset_s - result.start_offset_s) / wall) * 100, 0.4) + '%';
+    row.stream.style.backgroundColor = statusColor;
+  }
+  row.durLabel.textContent = (result.duration_s ?? '-') + 's';
+  repaintAxis(wall);
+  pendingCount--;
+  const p = document.getElementById('verdictProgress');
+  if (p) p.textContent = (rowEls.length - pendingCount) + ' / ' + rowEls.length + ' completed';
+
+  // Append the table row immediately so it's visible as soon as the request ends.
+  appendTableRow(result);
+}
+
+function appendTableRow(r) {
+  const tbody = document.getElementById('perReqTbody');
+  if (!tbody) return;
+  // If the row already exists (e.g. on finalize re-pass), update in place.
+  let tr = tbody.querySelector('[data-rowtr="' + r.index + '"]');
+  if (!tr) {
+    tr = document.createElement('tr');
+    tr.setAttribute('data-rowtr', r.index);
+    tbody.appendChild(tr);
+  }
+  const statusColor = r.status === 'success' ? 'var(--text-success)' : 'var(--text-danger)';
+  const note = r.error ? String(r.error).slice(0, 70) : (r.stream_status && r.stream_status !== 'ok' ? 'stream=' + r.stream_status : '');
+  tr.innerHTML =
+    '<td>' + r.index + '</td>' +
+    '<td>' + (r.start_iso ? r.start_iso.split('T')[1].replace('Z','') : '-') + '</td>' +
+    '<td>' + (r.end_iso ? r.end_iso.split('T')[1].replace('Z','') : '-') + '</td>' +
+    '<td>' + (r.duration_s ?? '-') + 's</td>' +
+    '<td>' + (r.ttft_s !== null && r.ttft_s !== undefined ? r.ttft_s + 's' : '-') + '</td>' +
+    '<td>' + r.completion_tokens + '</td>' +
+    '<td>' + r.tokens_per_sec + '</td>' +
+    '<td style="color:' + statusColor + '; font-weight:700;">' + r.status + '</td>' +
+    '<td style="color: var(--text-dim);">' + note + '</td>';
+}
+
+function bumpProgress() {
+  const p = document.getElementById('verdictProgress');
+  if (p) p.textContent = (rowEls.length - pendingCount) + ' / ' + rowEls.length + ' completed';
+}
+
+// ---- finalize ----
+function finalizeRender(data) {
+  latestRun = data;
+
+  // Stats row.
+  const statRow = document.getElementById('statRow');
+  if (statRow) {
+    statRow.innerHTML =
+      statBlock(data.wall_time_s + 's', 'Wall Time') +
+      statBlock(data.success_count + ' / ' + data.concurrency_requested, 'Successful') +
+      statBlock(data.total_tokens, 'Total Tokens') +
+      statBlock(data.aggregate_tokens_per_sec, 'Agg. Tokens/sec') +
+      statBlock(data.overlap_ratio + '×', 'Overlap Ratio');
+  }
+
+  // Verdict pill.
+  const kindVars = {
+    success: ['var(--fill-success)', 'var(--text-success)'],
+    danger: ['var(--fill-danger)', 'var(--text-danger)'],
+    warn: ['var(--fill-warn)', 'var(--text-warn)'],
+  };
+  const [vFill, vText] = kindVars[data.verdict_kind] || kindVars.warn;
+  const verdictBox = document.getElementById('verdictBox');
+  if (verdictBox) {
+    verdictBox.style.backgroundColor = vFill;
+    verdictBox.style.color = vText;
+    const dot = verdictBox.querySelector('.dot');
+    if (dot) dot.style.backgroundColor = vText;
+    const v = document.getElementById('verdictText');
+    if (v) v.textContent = data.verdict;
+    const p = document.getElementById('verdictProgress');
+    if (p) p.textContent = data.success_count + ' / ' + data.concurrency_requested + ' completed';
+  }
+
+  // Timeline range and footer.
+  const tr = document.getElementById('timelineRange');
+  if (tr) tr.textContent = '(0s → ' + data.wall_time_s + 's)';
+  const tf = document.getElementById('timelineFooter');
+  if (tf) tf.textContent = 'Started: ' + data.test_start_iso + ' · Finished: ' + data.test_end_iso;
+
+  // Re-apply final results to each row's bars (the X-axis is now stable).
+  const wall = Math.max(data.wall_time_s, 0.001);
+  data.results.forEach(r => {
+    const row = rowEls[r.index - 1];
+    if (!row) return;
+    const statusColor = r.status === 'success' ? 'var(--fill-success)' : 'var(--fill-danger)';
+    if (r.first_chunk_offset_s !== null) {
+      row.wait.style.left = (r.start_offset_s / wall * 100) + '%';
+      row.wait.style.width = Math.max(((r.first_chunk_offset_s - r.start_offset_s) / wall) * 100, 0.4) + '%';
+      row.stream.style.left = (r.first_chunk_offset_s / wall * 100) + '%';
+      row.stream.style.width = Math.max(((r.end_offset_s - r.first_chunk_offset_s) / wall) * 100, 0.4) + '%';
+      row.stream.style.backgroundColor = statusColor;
+      row.done.style.left = (r.end_offset_s / wall * 100) + '%';
+      row.done.style.width = '0%';
+    } else {
+      row.wait.style.width = '0%';
+      row.stream.style.left = (r.start_offset_s / wall * 100) + '%';
+      row.stream.style.width = Math.max(((r.end_offset_s - r.start_offset_s) / wall) * 100, 0.4) + '%';
+      row.stream.style.backgroundColor = statusColor;
+    }
+    row.durLabel.textContent = (r.duration_s ?? '-') + 's';
+    appendTableRow(r);
+  });
+
+  // Latency panel.
+  renderLatencyPanel(data);
+
+  // Export buttons.
+  wireExportButtons(data);
+}
+
+function renderLatencyPanel(data) {
+  const body = document.getElementById('latencyBody');
+  if (!body) return;
+  const success = data.results.filter(r => r.status === 'success');
+  const ttfts = success.map(r => r.ttft_s).filter(v => typeof v === 'number');
+  const tps = success.map(r => r.tokens_per_sec).filter(v => typeof v === 'number');
+
+  if (success.length === 0) {
+    body.innerHTML = '<div style="color: var(--text-dim);">No successful requests to summarize.</div>';
+    return;
+  }
+
+  const ttftStats = summary(ttfts);
+  const ttftP50 = percentile(ttfts, 50);
+  const ttftP90 = percentile(ttfts, 90);
+  const ttftP99 = percentile(ttfts, 99);
+  const ttftMax = ttftStats ? ttftStats.max : null;
+
+  const tpStats = summary(tps);
+
+  let html = '';
+  html += '<div class="mb-4">';
+  html += '<div class="text-xs font-bold uppercase tracking-wider mb-2" style="color: var(--text-dim);">TTFT (seconds) — n=' + ttftStats.count + '</div>';
+  html += '<div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
+  html += miniStat(ttftP50 !== null ? ttftP50 + 's' : '—', 'p50');
+  html += miniStat(ttftP90 !== null ? ttftP90 + 's' : '—', 'p90');
+  html += miniStat(ttftP99 !== null ? ttftP99 + 's' : '—', 'p99');
+  html += miniStat(ttftMax !== null ? ttftMax + 's' : '—', 'max');
+  html += '</div>';
+  if (ttftStats && ttftStats.count >= 4) {
+    html += renderHistogram(ttfts, 'var(--accent-yellow)');
+  } else {
+    html += '<div class="text-xs mt-2" style="color: var(--text-dim); opacity: 0.8;">Histogram hidden — need 4+ samples.</div>';
+  }
+  html += '</div>';
+
+  html += '<div>';
+  html += '<div class="text-xs font-bold uppercase tracking-wider mb-2" style="color: var(--text-dim);">Throughput (tokens/sec) — n=' + (tpStats ? tpStats.count : 0) + '</div>';
+  if (tpStats) {
+    html += '<div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
+    html += miniStat(tpStats.min, 'min');
+    html += miniStat(tpStats.median, 'median');
+    html += miniStat(tpStats.mean, 'mean');
+    html += miniStat(tpStats.max, 'max');
+    html += '</div>';
+    if (tpStats.count >= 4) html += renderHistogram(tps, 'var(--accent-green-btn)');
+    else html += '<div class="text-xs mt-2" style="color: var(--text-dim); opacity: 0.8;">Histogram hidden — need 4+ samples.</div>';
+  } else {
+    html += '<div style="color: var(--text-dim);">No throughput data.</div>';
+  }
+  html += '</div>';
+
+  body.innerHTML = html;
+}
+
+function renderHistogram(arr, color) {
+  const binCount = Math.min(12, Math.max(4, arr.length));
+  const h = histogramBins(arr, binCount);
+  if (!h) return '';
+  const maxCount = h.bins.reduce((m, b) => Math.max(m, b.count), 0);
+  let html = '<div class="hist-row" style="margin-top: 0.5rem;">';
+  h.bins.forEach(b => {
+    const pct = maxCount > 0 ? (b.count / maxCount) * 100 : 0;
+    html += '<div class="hist-cell" title="' + b.lo.toFixed(3) + ' → ' + b.hi.toFixed(3) + ' · n=' + b.count + '">';
+    html += '<div class="hist-bar" style="width:' + pct + '%; background-color:' + color + ';"></div>';
+    html += '<div class="hist-label">' + b.count + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function wireExportButtons(data) {
+  const slug = timestampSlug(data.test_start_iso) + '-c' + data.concurrency_requested;
+  const jsonBtn = document.getElementById('downloadJsonBtn');
+  const csvBtn = document.getElementById('downloadCsvBtn');
+  const copyBtn = document.getElementById('copySummaryBtn');
+
+  if (jsonBtn) {
+    jsonBtn.disabled = false;
+    jsonBtn.onclick = function () {
+      const payload = Object.assign({ version: 1, exported_at: new Date().toISOString() }, data);
+      downloadBlob(JSON.stringify(payload, null, 2), 'application/json', 'llmct-run-' + slug + '.json');
+    };
+  }
+  if (csvBtn) {
+    csvBtn.disabled = false;
+    csvBtn.onclick = function () {
+      const cols = ['index','status','http_status','start_iso','end_iso','start_offset_s','end_offset_s','duration_s','first_chunk_offset_s','ttft_s','completion_tokens','tokens_per_sec','error'];
+      const rows = [cols.join(',')];
+      data.results.forEach(r => {
+        rows.push([
+          r.index, r.status, r.http_status, r.start_iso, r.end_iso,
+          r.start_offset_s, r.end_offset_s, r.duration_s,
+          r.first_chunk_offset_s, r.ttft_s, r.completion_tokens, r.tokens_per_sec, r.error
+        ].map(csvEscape).join(','));
+      });
+      downloadBlob(rows.join('\n'), 'text/csv', 'llmct-run-' + slug + '.csv');
+    };
+  }
+  if (copyBtn) {
+    copyBtn.disabled = false;
+    copyBtn.onclick = async function () {
+      const payload = Object.assign({ version: 1, exported_at: new Date().toISOString() }, data);
+      const text = JSON.stringify(payload, null, 2);
+      const original = copyBtn.textContent;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        copyBtn.textContent = 'Copied!';
+      } catch (e) {
+        copyBtn.textContent = 'Copy failed';
+      }
+      setTimeout(function () { copyBtn.textContent = original; }, 1500);
+    };
+  }
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+# Playwright local artifacts
+.playwright-mcp/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
