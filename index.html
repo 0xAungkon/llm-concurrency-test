@@ -3,7 +3,87 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>LLM Concurrency Test</title>
+<title>LLM Concurrency Test — Browser-based load tester for chat-completion APIs</title>
+<meta name="description" content="A fastest load and concurrency tester for LLM chat-completion APIs (Inference) that lives over your browser. Fires N parallel requests from your browser and measures whether the API actually processes them concurrently. Includes streaming TTFT, live timeline, JSON/CSV export."/>
+<meta name="author" content="Aungkon"/>
+<meta name="keywords" content="LLM, concurrency, load test, load tester, chat completion, OpenAI, Anthropic, streaming, TTFT, time to first token, CORS, Chrome extension, browser, client-side, benchmark, parallel requests, inference"/>
+<meta name="robots" content="index, follow"/>
+<meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme: dark)"/>
+<meta name="theme-color" content="#fdfbf7" media="(prefers-color-scheme: light)"/>
+
+<!-- Canonical -->
+<link rel="canonical" href="https://0xaungkon.github.io/llm-concurrency-test/"/>
+
+<!-- Open Graph -->
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="LLM Concurrency Test"/>
+<meta property="og:title" content="LLM Concurrency Test — Browser-based load tester"/>
+<meta property="og:description" content="A fastest load and concurrency tester for LLM chat-completion APIs (Inference) that lives over your browser. Fires N parallel requests and measures whether the API actually processes them concurrently. Includes streaming TTFT, live timeline, JSON/CSV export."/>
+<meta property="og:url" content="https://0xaungkon.github.io/llm-concurrency-test/"/>
+<meta property="og:image" content="https://0xaungkon.github.io/llm-concurrency-test/og-image.png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="LLM Concurrency Test — browser-based load tester for LLM chat-completion APIs"/>
+<meta property="og:locale" content="en_US"/>
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="LLM Concurrency Test — Browser-based load tester"/>
+<meta name="twitter:description" content="A fastest load and concurrency tester for LLM chat-completion APIs (Inference) that lives over your browser. Fires N parallel requests and measures whether the API actually processes them concurrently."/>
+<meta name="twitter:image" content="https://0xaungkon.github.io/llm-concurrency-test/og-image.png"/>
+<meta name="twitter:image:alt" content="LLM Concurrency Test — browser-based load tester for LLM chat-completion APIs"/>
+
+<!-- Favicon (inline SVG, no extra request) -->
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='4' fill='%23ffcf7a' stroke='%231a1a1a' stroke-width='2'/><text x='12' y='17' font-size='14' font-weight='800' text-anchor='middle' font-family='Inter,sans-serif' fill='%231a1a1a'>L</text></svg>"/>
+
+<!-- Structured data: SoftwareApplication -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "LLM Concurrency Test",
+  "alternateName": "LLMTest",
+  "url": "https://0xaungkon.github.io/llm-concurrency-test/",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "Load Testing Tool",
+  "operatingSystem": "Any (browser-based)",
+  "browserRequirements": "Modern browser with JavaScript and Fetch support",
+  "description": "A fastest load and concurrency tester for LLM chat-completion APIs that lives over your browser. Fires N parallel requests and measures whether the API actually processes them concurrently, with streaming TTFT, live timeline, and JSON/CSV export.",
+  "keywords": "LLM, concurrency, load test, OpenAI, Anthropic, streaming, TTFT, CORS, Chrome extension",
+  "softwareVersion": "1.0.0",
+  "datePublished": "2026-06-30",
+  "inLanguage": "en",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Aungkon",
+    "url": "https://github.com/0xAungkon"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "0xAungkon",
+    "url": "https://github.com/0xAungkon"
+  },
+  "codeRepository": "https://github.com/0xAungkon/llm-concurrency-test",
+  "downloadUrl": "https://github.com/0xAungkon/llm-concurrency-test/releases/tag/v1.0.0",
+  "softwareHelp": "https://github.com/0xAungkon/llm-concurrency-test/blob/main/README.md",
+  "featureList": [
+    "Streaming + time-to-first-token (TTFT) measurement",
+    "Live timeline updates as requests stream",
+    "Overlap-ratio verdict (concurrent / partial / sequential)",
+    "JSON and CSV export of test results",
+    "CORS-bypass Chrome extension (MV3)",
+    "Light/heavy load presets",
+    "Dark mode"
+  ]
+}
+</script>
+
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
